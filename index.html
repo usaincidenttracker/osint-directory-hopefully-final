@@ -144,6 +144,12 @@
   .toast.error{ border-color:var(--red); }
   .footnote{ margin-top:50px; padding-top:16px; border-top:1px solid var(--line-soft); color:var(--muted-2); font-size:11.5px; line-height:1.6; }
   .copyright{ margin-top:14px; color:var(--muted-2); font-size:11px; font-family:'IBM Plex Mono',monospace; }
+  .terms-details{ margin-top:10px; }
+  .terms-details summary{ cursor:pointer; color:var(--accent); font-size:11.5px; font-family:'IBM Plex Mono',monospace; letter-spacing:0.03em; }
+  .terms-details summary:hover{ opacity:0.85; }
+  .terms-body{ margin-top:10px; padding:12px 14px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); }
+  .terms-body p{ margin:0 0 10px; font-size:11px; line-height:1.6; color:var(--muted); }
+  .terms-body p:last-child{ margin-bottom:0; }
 
   .zoomable{ cursor:zoom-in; }
   .lightbox{
@@ -158,6 +164,12 @@
     border:1px solid var(--line); border-radius:6px; background:var(--panel);
   }
   .lightbox-close:hover{ color:var(--text); border-color:var(--muted-2); }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(6,10,8,0.92); display:none;
+    align-items:center; justify-content:center; z-index:110; padding:20px;
+  }
+  .modal-overlay.open{ display:flex; }
 </style>
 </head>
 <body>
@@ -286,6 +298,8 @@
           </div>
           <button class="btn block" id="btnLogin">Sign In</button>
           <div id="loginError" style="color:var(--red); font-size:12.5px; display:none;"></div>
+          <button type="button" class="link-btn" id="btnForgotPassword" style="text-align:center;">Forgot password?</button>
+          <div id="forgotMsg" style="font-size:12.5px; color:var(--muted); display:none;"></div>
         </div>
       </div>
       <div class="warn">
@@ -387,19 +401,15 @@
             <label for="newStaffEmail">Their email</label>
             <input id="newStaffEmail" type="email" placeholder="colleague@example.com">
           </div>
-          <div class="field">
-            <label for="newStaffPass">Temporary password</label>
-            <input id="newStaffPass" type="password" placeholder="At least 8 characters">
-          </div>
           <div class="field" style="flex-direction:row; align-items:center; gap:8px;">
             <input type="checkbox" id="newStaffIsAdmin" style="width:auto;">
             <label for="newStaffIsAdmin" style="text-transform:none; font-size:13px; color:var(--text); letter-spacing:normal; font-family:'IBM Plex Sans',sans-serif;">Also let them add other staff</label>
           </div>
-          <button class="btn" id="btnAddStaff">Add Staff Member</button>
+          <button class="btn" id="btnAddStaff">Send Invite</button>
           <div id="addStaffMsg" style="font-size:12.5px; display:none;"></div>
         </div>
         <div class="warn">
-          They can sign in with this email/password right away. There's no in-app "change password" yet — either share this password to change on their own via Supabase's password-reset flow, or update it for them later in Supabase → Authentication → Users.
+          They'll get an email with a link to set their own password and sign in — no password to share by hand.
         </div>
       </div>
       <div class="warn" id="notAdminNote" style="max-width:420px; margin-top:18px; display:none;">
@@ -410,7 +420,17 @@
   </div>
 
   <div class="footnote">
-    Entries reflect user-submitted notes and are not verified claims. Reliability scores are crowd-submitted opinions (1–10), not a guarantee of accuracy. Please don't submit private personal information — this directory is meant to track public account activity, not individuals' offline identities.
+    Entries are user-submitted and staff-reviewed for basic legitimacy only. Any listing, note, alias, or reliability score reflects the personal opinion of the person who submitted it — it is not a verified fact, accusation, or endorsement by USA Incident Tracker. This directory tracks public account activity only; please don't submit private or non-public information about any individual.
+    <details class="terms-details">
+      <summary>Full terms &amp; removal requests</summary>
+      <div class="terms-body">
+        <p>No content on this site — including account listings, aliases, notes, or reliability scores — should be read as a factual assertion or claim of wrongdoing by USA Incident Tracker. All reliability scores and notes are the personal opinions of the individuals who submitted them and do not reflect the views, findings, or endorsement of USA Incident Tracker.</p>
+        <p>USA Incident Tracker does not independently verify user submissions and makes no warranty, express or implied, as to the accuracy, completeness, or reliability of any content on this site. Use of this site, and any reliance on its content, is at your own risk. To the maximum extent permitted by law, USA Incident Tracker disclaims all liability for damages of any kind arising from the use of, or reliance on, this site's content.</p>
+        <p>By submitting an account listing, note, score, or alias, you represent that you are stating a genuine opinion or good-faith belief, that your submission is not made with intent to harass, defame, or maliciously harm any person or entity, and you agree to indemnify and hold harmless USA Incident Tracker from any claim, loss, or damages arising from your submission.</p>
+        <p>This directory is limited to publicly observable online account activity. Do not submit private information, unpublished personal details, or content intended to identify, locate, or harass any individual.</p>
+        <p>If you are the subject of an entry and believe it is inaccurate, defamatory, or violates your privacy, contact <strong>info@osintdirectory.org</strong> to request a correction or removal. Requests are reviewed at our discretion.</p>
+      </div>
+    </details>
   </div>
 
   <div class="copyright">© <span id="copyYear"></span> USA Incident Tracker. All rights reserved.</div>
@@ -422,6 +442,21 @@
 <div class="lightbox" id="lightbox">
   <span class="lightbox-close">✕</span>
   <img id="lightboxImg" src="" alt="">
+</div>
+
+<div class="modal-overlay" id="setPasswordOverlay">
+  <div class="panel" style="max-width:380px; width:100%;">
+    <h3>Set Your Password</h3>
+    <div style="font-size:12.5px; color:var(--muted); margin-bottom:14px;">You've been invited as staff. Choose a password to finish setting up your account.</div>
+    <div class="form-col">
+      <div class="field">
+        <label for="newPasswordInput">New password</label>
+        <input id="newPasswordInput" type="password" placeholder="At least 8 characters">
+      </div>
+      <button class="btn block" id="btnSetPassword">Set Password &amp; Continue</button>
+      <div id="setPasswordMsg" style="font-size:12.5px; color:var(--red); display:none;"></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -769,6 +804,32 @@ async function doLogin(){
   onSignedIn(data.session);
 }
 
+document.getElementById('btnForgotPassword').addEventListener('click', async ()=>{
+  if(!sb) return showToast('Backend not configured yet', true);
+  const email = document.getElementById('staffEmail').value.trim();
+  const msg = document.getElementById('forgotMsg');
+  msg.style.display = 'none';
+
+  if(!email){
+    msg.textContent = 'Enter your email above first, then click Forgot password.';
+    msg.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('btnForgotPassword');
+  btn.disabled = true;
+  const redirectTo = window.location.origin + window.location.pathname;
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
+  btn.disabled = false;
+
+  // Show the same message whether or not the email exists — this is
+  // standard practice so the form can't be used to check who has an account.
+  msg.textContent = error
+    ? 'Could not send reset email right now — try again shortly.'
+    : 'If that email has a staff account, a reset link is on its way. Check your inbox.';
+  msg.style.display = 'block';
+});
+
 document.getElementById('btnLogout').addEventListener('click', async ()=>{
   if(sb) await sb.auth.signOut();
   currentUserEmail = null;
@@ -801,17 +862,16 @@ async function onSignedIn(session){
 document.getElementById('btnAddStaff').addEventListener('click', async ()=>{
   if(!sb) return showToast('Backend not configured yet', true);
   const email = document.getElementById('newStaffEmail').value.trim();
-  const password = document.getElementById('newStaffPass').value;
   const makeAdmin = document.getElementById('newStaffIsAdmin').checked;
   const msg = document.getElementById('addStaffMsg');
   msg.style.display = 'none';
 
-  if(!email || !password){ showToast('Email and password are required'); return; }
-  if(password.length < 8){ showToast('Password must be at least 8 characters'); return; }
+  if(!email){ showToast('Email is required'); return; }
 
+  const redirectTo = window.location.origin + window.location.pathname;
   const btn = document.getElementById('btnAddStaff');
   btn.disabled = true;
-  const { data, error } = await sb.functions.invoke('create-staff', { body: { email, password, makeAdmin } });
+  const { data, error } = await sb.functions.invoke('create-staff', { body: { email, makeAdmin, redirectTo } });
   btn.disabled = false;
 
   const failMsg = error ? error.message : (data && data.error ? data.error : null);
@@ -823,9 +883,8 @@ document.getElementById('btnAddStaff').addEventListener('click', async ()=>{
   }
 
   document.getElementById('newStaffEmail').value = '';
-  document.getElementById('newStaffPass').value = '';
   document.getElementById('newStaffIsAdmin').checked = false;
-  showToast('Staff member added — they can sign in now');
+  showToast('Invite sent — they\'ll get an email to set their password');
 });
 
 /* ---------------- STAFF: PHOTO UPLOAD ---------------- */
@@ -1103,9 +1162,49 @@ async function init(){
       document.getElementById('loginWrap').style.display = 'block';
       document.getElementById('staffPanel').style.display = 'none';
     }
+    if(event === 'PASSWORD_RECOVERY'){
+      document.getElementById('setPasswordOverlay').classList.add('open');
+    }
   });
 }
 init();
+
+/* ---------------- STAFF: SET PASSWORD (from invite link) ---------------- */
+document.getElementById('btnSetPassword').addEventListener('click', async ()=>{
+  const pw = document.getElementById('newPasswordInput').value;
+  const msg = document.getElementById('setPasswordMsg');
+  msg.style.display = 'none';
+
+  if(!pw || pw.length < 8){
+    msg.textContent = 'Password must be at least 8 characters.';
+    msg.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('btnSetPassword');
+  btn.disabled = true;
+  const { error } = await sb.auth.updateUser({ password: pw });
+  btn.disabled = false;
+
+  if(error){
+    msg.textContent = error.message;
+    msg.style.display = 'block';
+    return;
+  }
+
+  document.getElementById('setPasswordOverlay').classList.remove('open');
+  document.getElementById('newPasswordInput').value = '';
+  showToast('Password set — you\'re signed in');
+
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.tab-btn[data-tab="staff"]').classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-staff').classList.add('active');
+
+  const { data: { session } } = await sb.auth.getSession();
+  if(session) onSignedIn(session);
+});
+
 </script>
 </body>
 </html>
