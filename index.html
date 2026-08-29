@@ -412,11 +412,28 @@
           They'll get an email with a link to set their own password and sign in — no password to share by hand.
         </div>
       </div>
+      <div id="viewStaffListWrap" style="margin-top:14px; display:none;">
+        <button class="link-btn" id="btnOpenStaffList">View all staff →</button>
+      </div>
       <div class="warn" id="notAdminNote" style="max-width:420px; margin-top:18px; display:none;">
         Only staff admins can add new staff members. Ask an existing admin if you need someone added.
       </div>
     </div>
 
+  </div>
+
+  <!-- ===================== STAFF LIST (ADMIN ONLY) ===================== -->
+  <div class="view" id="view-stafflist">
+    <button class="back-link" id="btnBackFromStaffList">← Back to Staff Access</button>
+    <div class="panel">
+      <h3>All Staff — <span id="staffListCount">0</span></h3>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>Email</th><th>Level</th><th>Last Login</th><th>Joined</th></tr></thead>
+          <tbody id="staffListRows"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div class="footnote">
@@ -838,10 +855,49 @@ document.getElementById('btnLogout').addEventListener('click', async ()=>{
   document.getElementById('staffPanel').style.display = 'none';
   document.getElementById('addStaffPanel').style.display = 'none';
   document.getElementById('notAdminNote').style.display = 'none';
+  document.getElementById('viewStaffListWrap').style.display = 'none';
   document.getElementById('staffEmail').value = '';
   document.getElementById('staffPass').value = '';
+  document.getElementById('view-stafflist').classList.remove('active');
+  document.getElementById('view-staff').classList.add('active');
   if(activeDossierId) renderDossier();
 });
+
+/* ---------------- ADMIN: STAFF LIST ---------------- */
+function openStaffList(){
+  document.getElementById('view-staff').classList.remove('active');
+  document.getElementById('view-stafflist').classList.add('active');
+  fetchAndRenderStaffList();
+}
+function closeStaffList(){
+  document.getElementById('view-stafflist').classList.remove('active');
+  document.getElementById('view-staff').classList.add('active');
+}
+document.getElementById('btnOpenStaffList').addEventListener('click', openStaffList);
+document.getElementById('btnBackFromStaffList').addEventListener('click', closeStaffList);
+
+async function fetchAndRenderStaffList(){
+  const tbody = document.getElementById('staffListRows');
+  tbody.innerHTML = `<tr><td colspan="4" style="color:var(--muted-2); text-align:center; padding:20px;">Loading…</td></tr>`;
+
+  const { data, error } = await sb.functions.invoke('list-staff');
+  const failMsg = error ? error.message : (data && data.error ? data.error : null);
+  if(failMsg){
+    document.getElementById('staffListCount').textContent = '0';
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--red); text-align:center; padding:20px;">${esc(failMsg)}</td></tr>`;
+    return;
+  }
+
+  const staff = data.staff || [];
+  document.getElementById('staffListCount').textContent = staff.length;
+  const rows = staff.map(s => `<tr>
+    <td>${esc(s.email || '—')}</td>
+    <td>${s.isAdmin ? 'Admin' : 'Staff'}</td>
+    <td class="mono">${s.lastSignInAt ? new Date(s.lastSignInAt).toLocaleString() : 'Never'}</td>
+    <td class="mono">${s.createdAt ? new Date(s.createdAt).toLocaleDateString() : '—'}</td>
+  </tr>`).join('');
+  tbody.innerHTML = rows || `<tr><td colspan="4" style="color:var(--muted-2); text-align:center; padding:20px;">No staff found.</td></tr>`;
+}
 
 async function onSignedIn(session){
   currentUserEmail = session.user.email;
@@ -856,6 +912,7 @@ async function onSignedIn(session){
   isAdmin = !!adminRow;
   document.getElementById('addStaffPanel').style.display = isAdmin ? 'block' : 'none';
   document.getElementById('notAdminNote').style.display = isAdmin ? 'none' : 'block';
+  document.getElementById('viewStaffListWrap').style.display = isAdmin ? 'block' : 'none';
 }
 
 /* ---------------- STAFF: ADD NEW STAFF MEMBER ---------------- */
