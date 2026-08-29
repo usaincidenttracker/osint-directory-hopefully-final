@@ -314,8 +314,8 @@
    CONFIG — fill these in with your Supabase project's values.
    Project Settings → API → Project URL / anon public key.
    ============================================================ */
-const SUPABASE_URL = "https://YOUR-PROJECT-REF.supabase.co";
-const SUPABASE_ANON_KEY = "YOUR-ANON-PUBLIC-KEY";
+const SUPABASE_URL = "https://vpnhtkqhgduqylrznqxw.supabase.co/";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZwbmh0a3FoZ2R1cXlscnpucXh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5Njk5NjgsImV4cCI6MjEwMzU0NTk2OH0.Ms7hrOPQ5Mp2Cklk1Y_L_weT3Qo1wMHx_lNhqXn_OZU";
 
 const isConfigured = !SUPABASE_URL.includes("YOUR-PROJECT-REF") && !SUPABASE_ANON_KEY.includes("YOUR-ANON");
 if(!isConfigured) document.getElementById('configBanner').style.display = 'block';
