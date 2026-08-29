@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
   :root{
     --bg:#0F1613; --panel:#161F1A; --panel-2:#1C2822; --line:#2B3A32; --line-soft:#22302A;
@@ -289,6 +290,23 @@
               <tbody id="mgmtRows"></tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px; max-width:640px;">
+        <h3>Bulk Import Accounts (CSV)</h3>
+        <div class="form-col">
+          <div style="font-size:12.5px; color:var(--muted); line-height:1.65;">
+            From Google Sheets: <strong>File → Download → Comma Separated Values (.csv)</strong>, then upload that file here.
+            <br><br>
+            First row should be column headers. Expected columns: <span class="mono">name</span> (required), <span class="mono">country</span>, <span class="mono">aliases</span> (comma-separated), <span class="mono">photo_url</span> (a direct link to an already-hosted image — this doesn't upload photo files), <span class="mono">note</span> (an optional initial note).
+          </div>
+          <label class="upload" id="csvUploadZone">
+            <span id="csvUploadLabel">Click to choose a CSV file</span>
+            <input type="file" id="fCsv" accept=".csv,text/csv">
+          </label>
+          <button class="btn" id="btnImportCsv" disabled>Import Accounts</button>
+          <div id="csvStatus" class="mono" style="font-size:12.5px; white-space:pre-wrap; display:none; background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:10px 12px;"></div>
         </div>
       </div>
 
@@ -799,6 +817,69 @@ function renderMgmtTable(){
   document.getElementById('mgmtRows').innerHTML = rows || `<tr><td colspan="5" style="color:var(--muted-2); text-align:center; padding:20px;">No accounts yet — add the first one.</td></tr>`;
   document.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>startEdit(b.dataset.edit)));
   document.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', ()=>deleteAccount(b.dataset.del)));
+}
+
+/* ---------------- STAFF: BULK CSV IMPORT ---------------- */
+document.getElementById('fCsv').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  document.getElementById('csvUploadLabel').textContent = file ? file.name : 'Click to choose a CSV file';
+  document.getElementById('btnImportCsv').disabled = !file;
+});
+
+document.getElementById('btnImportCsv').addEventListener('click', ()=>{
+  if(!sb) return showToast('Backend not configured yet', true);
+  const file = document.getElementById('fCsv').files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('csvStatus');
+  statusEl.style.display = 'block';
+  statusEl.textContent = 'Reading file…';
+
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: (results) => { runCsvImport(results.data, statusEl); },
+    error: (err) => { statusEl.textContent = 'Could not read CSV: ' + err.message; }
+  });
+});
+
+async function runCsvImport(rows, statusEl){
+  const btn = document.getElementById('btnImportCsv');
+  btn.disabled = true;
+  let success = 0;
+  const failures = [];
+
+  for(let i=0; i<rows.length; i++){
+    const row = rows[i];
+    const name = (row.name || row.Name || '').trim();
+    statusEl.textContent = `Importing ${i+1} of ${rows.length}…`;
+
+    if(!name){ failures.push(`Row ${i+2}: missing "name" — skipped`); continue; }
+
+    const country = (row.country || row.Country || '').trim();
+    const aliasesRaw = row.aliases || row.Aliases || '';
+    const aliases = aliasesRaw.split(',').map(s=>s.trim()).filter(Boolean);
+    const photoUrl = (row.photo_url || row.photoUrl || row['Photo URL'] || '').trim() || null;
+    const note = (row.note || row.Note || row.notes || '').trim();
+
+    const { data, error } = await sb.from('accounts').insert({ name, country, aliases, photo_url: photoUrl }).select().single();
+    if(error){ failures.push(`Row ${i+2} (${name}): ${error.message}`); continue; }
+
+    if(note){
+      await sb.from('notes').insert({ account_id: data.id, text: note, score: null, author: 'Staff' });
+    }
+    success++;
+  }
+
+  await fetchAccounts();
+  renderMgmtTable();
+  renderCountryList();
+  renderResults();
+
+  let summary = `Done — ${success} of ${rows.length} imported.`;
+  if(failures.length) summary += `\n\nIssues:\n` + failures.join('\n');
+  statusEl.textContent = summary;
+  btn.disabled = false;
+  showToast(`Imported ${success} account${success===1?'':'s'}`);
 }
 
 /* ---------------- INIT ---------------- */
