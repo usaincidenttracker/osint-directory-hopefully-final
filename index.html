@@ -140,6 +140,7 @@
   .toast.show{ opacity:1; }
   .toast.error{ border-color:var(--red); }
   .footnote{ margin-top:50px; padding-top:16px; border-top:1px solid var(--line-soft); color:var(--muted-2); font-size:11.5px; line-height:1.6; }
+  .copyright{ margin-top:14px; color:var(--muted-2); font-size:11px; font-family:'IBM Plex Mono',monospace; }
 
   .zoomable{ cursor:zoom-in; }
   .lightbox{
@@ -167,7 +168,7 @@
   <div class="masthead">
     <div>
       <h1 class="display">OSINT Account Directory</h1>
-      <div class="subtitle">A Service Provided by USA Inicdent Tracker</div>
+      <div class="subtitle">A Service Provided by USA Incident Tracker</div>
     </div>
     <div class="stamp" id="recordCount">— records on file</div>
   </div>
@@ -318,6 +319,8 @@
   <div class="footnote">
     Entries reflect user-submitted notes and are not verified claims. Reliability scores are crowd-submitted opinions (1–10), not a guarantee of accuracy. Please don't submit private personal information — this directory is meant to track public account activity, not individuals' offline identities.
   </div>
+
+  <div class="copyright">© <span id="copyYear"></span> USA Incident Tracker. All rights reserved.</div>
 
 </div>
 
@@ -795,6 +798,7 @@ function renderMgmtTable(){
 
 /* ---------------- INIT ---------------- */
 async function init(){
+  document.getElementById('copyYear').textContent = new Date().getFullYear();
   if(!sb){ renderResults(); return; }
   await fetchAccounts();
   renderResults();
