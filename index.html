@@ -203,6 +203,15 @@
             <input id="qCountry" type="text" placeholder="e.g. Ukraine" list="countryList">
             <datalist id="countryList"></datalist>
           </div>
+          <div class="field" style="max-width:190px;">
+            <label for="sortSelect">Sort by</label>
+            <select id="sortSelect">
+              <option value="name-asc">Name (A–Z)</option>
+              <option value="name-desc">Name (Z–A)</option>
+              <option value="rating-desc">Rating (best to worst)</option>
+              <option value="rating-asc">Rating (worst to best)</option>
+            </select>
+          </div>
           <div class="console-actions">
             <button class="btn" id="btnSearch">Search</button>
             <button class="btn ghost" id="btnClear">Clear</button>
@@ -471,10 +480,21 @@ function renderCountryList(){
 function renderResults(){
   const qName = document.getElementById('qName').value.trim().toLowerCase();
   const qCountry = document.getElementById('qCountry').value.trim().toLowerCase();
+  const sortMode = document.getElementById('sortSelect').value;
   const filtered = accountsCache.filter(a=>{
     const nameMatch = !qName || (a.name||'').toLowerCase().includes(qName);
     const countryMatch = !qCountry || (a.country||'').toLowerCase().includes(qCountry);
     return nameMatch && countryMatch;
+  }).sort((a,b)=>{
+    if(sortMode === 'rating-desc' || sortMode === 'rating-asc'){
+      const av = displayScore(a).value, bv = displayScore(b).value;
+      if(av === null && bv === null) return 0;
+      if(av === null) return 1;
+      if(bv === null) return -1;
+      return sortMode === 'rating-desc' ? bv - av : av - bv;
+    }
+    const cmp = (a.name||'').localeCompare(b.name||'', undefined, { sensitivity: 'base' });
+    return sortMode === 'name-desc' ? -cmp : cmp;
   });
 
   document.getElementById('recordCount').textContent = accountsCache.length + (accountsCache.length===1 ? ' record on file' : ' records on file');
@@ -511,6 +531,7 @@ function renderCard(acc){
 }
 
 document.getElementById('btnSearch').addEventListener('click', renderResults);
+document.getElementById('sortSelect').addEventListener('change', renderResults);
 document.getElementById('qName').addEventListener('keydown', e=>{ if(e.key==='Enter') renderResults(); });
 document.getElementById('qCountry').addEventListener('keydown', e=>{ if(e.key==='Enter') renderResults(); });
 document.getElementById('btnClear').addEventListener('click', ()=>{
