@@ -219,6 +219,44 @@
         </div>
       </div>
 
+      <div style="margin-bottom:20px;">
+        <button class="btn ghost" id="btnShowSubmit">+ Submit a new account</button>
+      </div>
+
+      <div class="panel" id="submitPanel" style="display:none; margin-bottom:22px; max-width:520px;">
+        <h3>Submit New Account</h3>
+        <div style="font-size:12.5px; color:var(--muted); line-height:1.6; margin-bottom:4px;">
+          Suggest an account for the directory. A staff member reviews every submission before it appears publicly.
+        </div>
+        <div class="form-col">
+          <div class="field">
+            <label for="subName">Handle</label>
+            <input id="subName" type="text" placeholder="e.g. @fieldnotes_intel">
+          </div>
+          <div class="field">
+            <label for="subCountry">Country</label>
+            <input id="subCountry" type="text" placeholder="e.g. Ukraine">
+          </div>
+          <div class="field">
+            <label for="subAliases">Account name (comma separated)</label>
+            <input id="subAliases" type="text" placeholder="e.g. Intelligence FRONT, IntelFront">
+          </div>
+          <div class="field">
+            <label for="subPhoto">Photo link (optional)</label>
+            <input id="subPhoto" type="url" placeholder="https://...">
+          </div>
+          <div class="field">
+            <label for="subNote">Note (optional)</label>
+            <textarea id="subNote" rows="3" placeholder="Why should this account be added?"></textarea>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn" id="btnSubmitAccount">Submit for Review</button>
+            <button class="btn ghost" id="btnCancelSubmit">Cancel</button>
+          </div>
+          <div id="submitMsg" style="font-size:12.5px; display:none;"></div>
+        </div>
+      </div>
+
       <div class="result-count" id="resultCount"></div>
       <div class="grid" id="resultsGrid"></div>
       <div class="empty-state" id="emptyState" style="display:none;">
@@ -260,6 +298,17 @@
         <span class="who">Signed in as <span id="whoEmail" class="mono"></span></span>
         <button class="btn ghost" id="btnLogout">Sign Out</button>
       </div>
+
+      <div class="panel" style="margin-bottom:18px;">
+        <h3>Pending Submissions — <span id="pendingCount">0</span></h3>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>Name</th><th>Country</th><th>Submitted</th><th></th></tr></thead>
+            <tbody id="pendingRows"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="staff-grid">
         <div class="panel">
           <h3 id="formTitle">Add Account</h3>
@@ -402,13 +451,14 @@ async function fetchAccounts(){
   if(!sb) return;
   const { data, error } = await sb
     .from('accounts')
-    .select('id, name, country, photo_url, aliases, staff_score, date_added, notes ( id, text, score, author, created_at )')
+    .select('id, name, country, photo_url, aliases, staff_score, status, date_added, notes ( id, text, score, author, created_at )')
     .order('date_added', { ascending: true });
   if(error){ showToast('Could not load directory: ' + error.message, true); return; }
   accountsCache = (data || []).map(row => ({
     id: row.id, name: row.name, country: row.country, photo: row.photo_url,
     aliases: row.aliases || [],
     staffScore: (row.staff_score === null || row.staff_score === undefined) ? null : row.staff_score,
+    status: row.status || 'approved',
     dateAdded: new Date(row.date_added).getTime(),
     notes: (row.notes || []).map(n => ({
       id: n.id, text: n.text, score: n.score, author: n.author, date: new Date(n.created_at).getTime()
@@ -481,7 +531,8 @@ function renderResults(){
   const qName = document.getElementById('qName').value.trim().toLowerCase();
   const qCountry = document.getElementById('qCountry').value.trim().toLowerCase();
   const sortMode = document.getElementById('sortSelect').value;
-  const filtered = accountsCache.filter(a=>{
+  const approvedAccounts = accountsCache.filter(a => a.status !== 'pending');
+  const filtered = approvedAccounts.filter(a=>{
     const nameMatch = !qName || (a.name||'').toLowerCase().includes(qName);
     const countryMatch = !qCountry || (a.country||'').toLowerCase().includes(qCountry);
     return nameMatch && countryMatch;
@@ -497,7 +548,7 @@ function renderResults(){
     return sortMode === 'name-desc' ? -cmp : cmp;
   });
 
-  document.getElementById('recordCount').textContent = accountsCache.length + (accountsCache.length===1 ? ' record on file' : ' records on file');
+  document.getElementById('recordCount').textContent = approvedAccounts.length + (approvedAccounts.length===1 ? ' record on file' : ' records on file');
   document.getElementById('resultCount').textContent = (qName||qCountry)
     ? `${filtered.length} match${filtered.length===1?'':'es'}`
     : `Showing all ${filtered.length} account${filtered.length===1?'':'s'}`;
@@ -536,6 +587,60 @@ document.getElementById('qName').addEventListener('keydown', e=>{ if(e.key==='En
 document.getElementById('qCountry').addEventListener('keydown', e=>{ if(e.key==='Enter') renderResults(); });
 document.getElementById('btnClear').addEventListener('click', ()=>{
   document.getElementById('qName').value=''; document.getElementById('qCountry').value=''; renderResults();
+});
+
+/* ---------------- PUBLIC: SUBMIT NEW ACCOUNT ---------------- */
+function resetSubmitForm(){
+  document.getElementById('subName').value = '';
+  document.getElementById('subCountry').value = '';
+  document.getElementById('subAliases').value = '';
+  document.getElementById('subPhoto').value = '';
+  document.getElementById('subNote').value = '';
+  document.getElementById('submitMsg').style.display = 'none';
+}
+
+document.getElementById('btnShowSubmit').addEventListener('click', ()=>{
+  document.getElementById('submitPanel').style.display = 'block';
+  document.getElementById('btnShowSubmit').style.display = 'none';
+});
+
+document.getElementById('btnCancelSubmit').addEventListener('click', ()=>{
+  document.getElementById('submitPanel').style.display = 'none';
+  document.getElementById('btnShowSubmit').style.display = 'inline-block';
+  resetSubmitForm();
+});
+
+document.getElementById('btnSubmitAccount').addEventListener('click', async ()=>{
+  if(!sb) return showToast('Backend not configured yet', true);
+  const name = document.getElementById('subName').value.trim();
+  const country = document.getElementById('subCountry').value.trim();
+  const aliases = document.getElementById('subAliases').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const photoUrl = document.getElementById('subPhoto').value.trim() || null;
+  const note = document.getElementById('subNote').value.trim();
+  const msg = document.getElementById('submitMsg');
+  msg.style.display = 'none';
+
+  if(!name){ showToast('A handle is required'); return; }
+
+  const btn = document.getElementById('btnSubmitAccount');
+  btn.disabled = true;
+  const { data, error } = await sb.from('accounts').insert({ name, country, aliases, photo_url: photoUrl, status: 'pending' }).select().single();
+  btn.disabled = false;
+
+  if(error){
+    msg.textContent = 'Could not submit: ' + error.message;
+    msg.style.color = 'var(--red)';
+    msg.style.display = 'block';
+    return;
+  }
+  if(note && data){
+    await sb.from('notes').insert({ account_id: data.id, text: note, score: null, author: null });
+  }
+
+  document.getElementById('submitPanel').style.display = 'none';
+  document.getElementById('btnShowSubmit').style.display = 'inline-block';
+  resetSubmitForm();
+  showToast('Submitted — a staff member will review it before it appears publicly.');
 });
 
 /* ---------------- DOSSIER DETAIL PAGE ---------------- */
@@ -683,6 +788,7 @@ async function onSignedIn(session){
   document.getElementById('staffPanel').style.display = 'block';
   document.getElementById('whoEmail').textContent = session.user.email;
   renderMgmtTable();
+  renderPendingTable();
   if(activeDossierId) renderDossier();
 
   const { data: adminRow } = await sb.from('staff_admins').select('user_id').eq('user_id', session.user.id).maybeSingle();
@@ -785,7 +891,7 @@ document.getElementById('btnSave').addEventListener('click', async ()=>{
     if(note) await sb.from('notes').insert({ account_id: editingId, text: note, score: null, author: 'Staff' });
     showToast('Account updated');
   }else{
-    const { data, error } = await sb.from('accounts').insert({ name, country, photo_url: photoUrl, aliases, staff_score: staffScore }).select().single();
+    const { data, error } = await sb.from('accounts').insert({ name, country, photo_url: photoUrl, aliases, staff_score: staffScore, status: 'approved' }).select().single();
     if(error){ showToast('Save failed: ' + error.message, true); saveBtn.disabled=false; return; }
     if(note) await sb.from('notes').insert({ account_id: data.id, text: note, score: null, author: 'Staff' });
     showToast('Account added');
@@ -795,6 +901,7 @@ document.getElementById('btnSave').addEventListener('click', async ()=>{
   resetForm();
   await fetchAccounts();
   renderMgmtTable();
+  renderPendingTable();
   renderCountryList();
   renderResults();
 });
@@ -845,13 +952,15 @@ async function deleteAccount(id){
   if(editingId === id) resetForm();
   await fetchAccounts();
   renderMgmtTable();
+  renderPendingTable();
   renderCountryList();
   renderResults();
 }
 
 function renderMgmtTable(){
-  document.getElementById('mgmtCount').textContent = accountsCache.length;
-  const rows = accountsCache.map(acc=>{
+  const approved = accountsCache.filter(a => a.status !== 'pending');
+  document.getElementById('mgmtCount').textContent = approved.length;
+  const rows = approved.map(acc=>{
     const scoreInfo = displayScore(acc);
     return `<tr>
       <td>${esc(acc.name)}</td>
@@ -867,6 +976,50 @@ function renderMgmtTable(){
   document.getElementById('mgmtRows').innerHTML = rows || `<tr><td colspan="5" style="color:var(--muted-2); text-align:center; padding:20px;">No accounts yet — add the first one.</td></tr>`;
   document.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>startEdit(b.dataset.edit)));
   document.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', ()=>deleteAccount(b.dataset.del)));
+}
+
+function renderPendingTable(){
+  const pending = accountsCache.filter(a => a.status === 'pending');
+  document.getElementById('pendingCount').textContent = pending.length;
+  const rows = pending.map(acc=>`<tr>
+    <td>${esc(acc.name)}</td>
+    <td>${esc(acc.country || '—')}</td>
+    <td class="mono">${new Date(acc.dateAdded).toLocaleDateString()}</td>
+    <td class="row-actions">
+      <button data-approve="${acc.id}">Approve</button>
+      <button data-editpending="${acc.id}">Edit</button>
+      <button data-reject="${acc.id}" class="danger">Reject</button>
+    </td>
+  </tr>`).join('');
+  document.getElementById('pendingRows').innerHTML = rows || `<tr><td colspan="4" style="color:var(--muted-2); text-align:center; padding:20px;">No pending submissions.</td></tr>`;
+  document.querySelectorAll('[data-approve]').forEach(b=>b.addEventListener('click', ()=>approveAccount(b.dataset.approve)));
+  document.querySelectorAll('[data-editpending]').forEach(b=>b.addEventListener('click', ()=>startEdit(b.dataset.editpending)));
+  document.querySelectorAll('[data-reject]').forEach(b=>b.addEventListener('click', ()=>rejectAccount(b.dataset.reject)));
+}
+
+async function approveAccount(id){
+  const { error } = await sb.from('accounts').update({ status: 'approved' }).eq('id', id);
+  if(error){ showToast('Approve failed: ' + error.message, true); return; }
+  showToast('Account approved — now live');
+  await fetchAccounts();
+  renderPendingTable();
+  renderMgmtTable();
+  renderCountryList();
+  renderResults();
+}
+
+async function rejectAccount(id){
+  const acc = accountsCache.find(a=>a.id===id);
+  if(!acc) return;
+  if(!confirm(`Reject and delete "${acc.name}"? This can't be undone.`)) return;
+  const { error } = await sb.from('accounts').delete().eq('id', id);
+  if(error){ showToast('Reject failed: ' + error.message, true); return; }
+  showToast('Submission rejected');
+  await fetchAccounts();
+  renderPendingTable();
+  renderMgmtTable();
+  renderCountryList();
+  renderResults();
 }
 
 /* ---------------- STAFF: BULK CSV IMPORT ---------------- */
@@ -913,7 +1066,7 @@ async function runCsvImport(rows, statusEl){
     const staffScoreRaw = (row.staff_score || row.staffScore || row['Staff Score'] || '').trim();
     const staffScore = staffScoreRaw && !isNaN(parseInt(staffScoreRaw,10)) ? parseInt(staffScoreRaw,10) : null;
 
-    const { data, error } = await sb.from('accounts').insert({ name, country, aliases, photo_url: photoUrl, staff_score: staffScore }).select().single();
+    const { data, error } = await sb.from('accounts').insert({ name, country, aliases, photo_url: photoUrl, staff_score: staffScore, status: 'approved' }).select().single();
     if(error){ failures.push(`Row ${i+2} (${name}): ${error.message}`); continue; }
 
     if(note){
@@ -924,6 +1077,7 @@ async function runCsvImport(rows, statusEl){
 
   await fetchAccounts();
   renderMgmtTable();
+  renderPendingTable();
   renderCountryList();
   renderResults();
 
