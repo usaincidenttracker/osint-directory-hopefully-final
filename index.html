@@ -279,6 +279,14 @@
               <label for="fNote">Initial note (optional)</label>
               <textarea id="fNote" rows="3" placeholder="Context, sourcing history, known aliases…"></textarea>
             </div>
+            <div class="field">
+              <div class="slider-label-row">
+                <label for="fStaffScore">Staff reliability score</label>
+                <span class="mono" id="staffScoreVal">Not set</span>
+              </div>
+              <input type="range" id="fStaffScore" min="0" max="10" value="0">
+              <div class="slider-caps"><span>Use community average</span><span>Staff override</span></div>
+            </div>
             <div style="display:flex; gap:8px;">
               <button class="btn" id="btnSave">Save Account</button>
               <button class="btn ghost" id="btnCancelEdit" style="display:none;">Cancel Edit</button>
@@ -385,12 +393,13 @@ async function fetchAccounts(){
   if(!sb) return;
   const { data, error } = await sb
     .from('accounts')
-    .select('id, name, country, photo_url, aliases, date_added, notes ( id, text, score, author, created_at )')
+    .select('id, name, country, photo_url, aliases, staff_score, date_added, notes ( id, text, score, author, created_at )')
     .order('date_added', { ascending: true });
   if(error){ showToast('Could not load directory: ' + error.message, true); return; }
   accountsCache = (data || []).map(row => ({
     id: row.id, name: row.name, country: row.country, photo: row.photo_url,
     aliases: row.aliases || [],
+    staffScore: (row.staff_score === null || row.staff_score === undefined) ? null : row.staff_score,
     dateAdded: new Date(row.date_added).getTime(),
     notes: (row.notes || []).map(n => ({
       id: n.id, text: n.text, score: n.score, author: n.author, date: new Date(n.created_at).getTime()
@@ -412,9 +421,14 @@ function avgScore(acc){
   if(!scored.length) return null;
   return scored.reduce((a,n)=>a+n.score,0) / scored.length;
 }
-function starBadge(avg){
-  if(avg===null) return `<span class="star-badge na">${STAR} N/A</span>`;
-  return `<span class="star-badge">${STAR} ${avg.toFixed(1)}/10</span>`;
+function displayScore(acc){
+  if(typeof acc.staffScore === 'number') return { value: acc.staffScore, isStaffSet: true };
+  return { value: avgScore(acc), isStaffSet: false };
+}
+function starBadge(scoreInfo){
+  const { value } = scoreInfo;
+  if(value===null) return `<span class="star-badge na">${STAR} N/A</span>`;
+  return `<span class="star-badge">${STAR} ${value.toFixed(1)}/10</span>`;
 }
 
 /* ---------------- LIGHTBOX ---------------- */
@@ -478,7 +492,7 @@ function renderResults(){
 }
 
 function renderCard(acc){
-  const avg = avgScore(acc);
+  const scoreInfo = displayScore(acc);
   const notes = acc.notes || [];
   return `
     <div class="card" id="card-${acc.id}">
@@ -490,7 +504,7 @@ function renderCard(acc){
         </div>
       </div>
       <div class="card-foot">
-        ${starBadge(avg)}
+        ${starBadge(scoreInfo)}
         <span class="note-count">${notes.length} note${notes.length===1?'':'s'}</span>
       </div>
     </div>`;
@@ -522,7 +536,7 @@ function renderDossier(){
   const acc = accountsCache.find(a=>a.id===activeDossierId);
   const wrap = document.getElementById('dossierDetail');
   if(!acc){ closeDossier(); return; }
-  const avg = avgScore(acc);
+  const scoreInfo = displayScore(acc);
   const notes = acc.notes || [];
 
   const notesHtml = notes.length ? notes.slice().reverse().map(n => `
@@ -545,7 +559,7 @@ function renderDossier(){
         <div class="dossier-photo">${acc.photo ? `<img class="zoomable" data-full="${esc(acc.photo)}" src="${esc(acc.photo)}">` : '👤'}</div>
         <div class="dossier-loc">${PIN} ${esc(acc.country || 'Unknown location')}</div>
         <div class="score-card">
-          <div class="big-star">${STAR} ${avg===null ? 'N/A' : avg.toFixed(1)+'/10'}</div>
+          <div class="big-star">${STAR} ${scoreInfo.value===null ? 'N/A' : scoreInfo.value.toFixed(1)+'/10'}</div>
           <div class="cap">avg reliability · ${notes.length} note${notes.length===1?'':'s'}</div>
         </div>
       </div>
@@ -688,6 +702,11 @@ document.getElementById('btnAddStaff').addEventListener('click', async ()=>{
 });
 
 /* ---------------- STAFF: PHOTO UPLOAD ---------------- */
+document.getElementById('fStaffScore').addEventListener('input', (e)=>{
+  const v = parseInt(e.target.value, 10);
+  document.getElementById('staffScoreVal').textContent = v === 0 ? 'Not set' : v + '/10';
+});
+
 document.getElementById('fPhoto').addEventListener('change', (e)=>{
   const file = e.target.files[0];
   if(!file) return;
@@ -729,6 +748,8 @@ document.getElementById('btnSave').addEventListener('click', async ()=>{
   const country = document.getElementById('fCountry').value.trim();
   const note = document.getElementById('fNote').value.trim();
   const aliases = document.getElementById('fAliases').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const staffScoreRaw = parseInt(document.getElementById('fStaffScore').value, 10);
+  const staffScore = staffScoreRaw === 0 ? null : staffScoreRaw;
   if(!name){ showToast('Account name is required'); return; }
 
   const saveBtn = document.getElementById('btnSave');
@@ -736,14 +757,14 @@ document.getElementById('btnSave').addEventListener('click', async ()=>{
   const photoUrl = await uploadPhotoIfAny();
 
   if(editingId){
-    const patch = { name, country, aliases };
+    const patch = { name, country, aliases, staff_score: staffScore };
     if(photoUrl) patch.photo_url = photoUrl;
     const { error } = await sb.from('accounts').update(patch).eq('id', editingId);
     if(error){ showToast('Update failed: ' + error.message, true); saveBtn.disabled=false; return; }
     if(note) await sb.from('notes').insert({ account_id: editingId, text: note, score: null, author: 'Staff' });
     showToast('Account updated');
   }else{
-    const { data, error } = await sb.from('accounts').insert({ name, country, photo_url: photoUrl, aliases }).select().single();
+    const { data, error } = await sb.from('accounts').insert({ name, country, photo_url: photoUrl, aliases, staff_score: staffScore }).select().single();
     if(error){ showToast('Save failed: ' + error.message, true); saveBtn.disabled=false; return; }
     if(note) await sb.from('notes').insert({ account_id: data.id, text: note, score: null, author: 'Staff' });
     showToast('Account added');
@@ -766,6 +787,8 @@ function resetForm(){
   document.getElementById('fAliases').value = '';
   document.getElementById('fNote').value = '';
   document.getElementById('fPhoto').value = '';
+  document.getElementById('fStaffScore').value = 0;
+  document.getElementById('staffScoreVal').textContent = 'Not set';
   document.getElementById('uploadPreview').innerHTML = '🖼';
   document.getElementById('uploadLabel').textContent = 'Click to upload a photo (auto-resized)';
   document.getElementById('formTitle').textContent = 'Add Account';
@@ -781,6 +804,8 @@ function startEdit(id){
   document.getElementById('fCountry').value = acc.country || '';
   document.getElementById('fAliases').value = (acc.aliases || []).join(', ');
   document.getElementById('fNote').value = '';
+  document.getElementById('fStaffScore').value = typeof acc.staffScore === 'number' ? acc.staffScore : 0;
+  document.getElementById('staffScoreVal').textContent = typeof acc.staffScore === 'number' ? acc.staffScore + '/10' : 'Not set';
   document.getElementById('uploadPreview').innerHTML = acc.photo ? `<img src="${acc.photo}">` : '🖼';
   document.getElementById('uploadLabel').textContent = acc.photo ? 'Current photo — upload to replace' : 'Click to upload a photo (auto-resized)';
   document.getElementById('formTitle').textContent = 'Edit Account';
@@ -806,12 +831,12 @@ async function deleteAccount(id){
 function renderMgmtTable(){
   document.getElementById('mgmtCount').textContent = accountsCache.length;
   const rows = accountsCache.map(acc=>{
-    const avg = avgScore(acc);
+    const scoreInfo = displayScore(acc);
     return `<tr>
       <td>${esc(acc.name)}</td>
       <td>${esc(acc.country || '—')}</td>
       <td>${(acc.notes||[]).length}</td>
-      <td class="mono">${avg===null ? '—' : avg.toFixed(1)}</td>
+      <td class="mono">${scoreInfo.value===null ? '—' : scoreInfo.value.toFixed(1)}</td>
       <td class="row-actions">
         <button data-edit="${acc.id}">Edit</button>
         <button data-del="${acc.id}" class="danger">Delete</button>
@@ -864,8 +889,10 @@ async function runCsvImport(rows, statusEl){
     const aliases = aliasesRaw.split(',').map(s=>s.trim()).filter(Boolean);
     const photoUrl = (row.photo_url || row.photoUrl || row['Photo URL'] || '').trim() || null;
     const note = (row.note || row.Note || row.notes || '').trim();
+    const staffScoreRaw = (row.staff_score || row.staffScore || row['Staff Score'] || '').trim();
+    const staffScore = staffScoreRaw && !isNaN(parseInt(staffScoreRaw,10)) ? parseInt(staffScoreRaw,10) : null;
 
-    const { data, error } = await sb.from('accounts').insert({ name, country, aliases, photo_url: photoUrl }).select().single();
+    const { data, error } = await sb.from('accounts').insert({ name, country, aliases, photo_url: photoUrl, staff_score: staffScore }).select().single();
     if(error){ failures.push(`Row ${i+2} (${name}): ${error.message}`); continue; }
 
     if(note){
