@@ -90,8 +90,8 @@
   .score-card .big-star{ display:flex; align-items:center; gap:8px; font-size:20px; font-weight:700; color:var(--amber); font-family:'IBM Plex Mono',monospace; }
   .score-card .cap{ color:var(--muted); font-size:12.5px; margin-top:3px; }
   .alias-label{ font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted-2); font-family:'IBM Plex Mono',monospace; margin:16px 0 8px; }
-  .alias-chips{ display:flex; flex-wrap:wrap; gap:6px; }
-  .alias-chip{ background:var(--panel-2); border:1px solid var(--line); color:var(--text); font-size:12px; padding:4px 10px; border-radius:var(--radius); font-family:'IBM Plex Mono',monospace; }
+  .alias-chips{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .alias-chip{ background:var(--panel-2); border:1px solid var(--line); color:var(--muted); font-size:12px; padding:3px 9px; border-radius:var(--radius); font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:0.04em; }
 
   .dossier-handle{ font-size:30px; font-weight:800; margin:0 0 20px; line-height:1.15; }
   .section-label{ font-size:12px; letter-spacing:0.08em; text-transform:uppercase; font-weight:600; color:var(--muted); margin:0 0 12px; font-family:'IBM Plex Mono',monospace; }
@@ -245,7 +245,7 @@
           <h3 id="formTitle">Add Account</h3>
           <div class="form-col">
             <div class="field">
-              <label for="fName">Account name / handle</label>
+              <label for="fName">Handle</label>
               <input id="fName" type="text" placeholder="e.g. @fieldnotes_intel">
             </div>
             <div class="field">
@@ -253,7 +253,7 @@
               <input id="fCountry" type="text" placeholder="e.g. Ukraine">
             </div>
             <div class="field">
-              <label for="fAliases">Aliases (comma separated)</label>
+              <label for="fAliases">Account name (comma separated)</label>
               <input id="fAliases" type="text" placeholder="e.g. Intelligence FRONT, IntelFront">
             </div>
             <div class="field">
@@ -518,11 +518,9 @@ function renderDossier(){
           <div class="big-star">${STAR} ${avg===null ? 'N/A' : avg.toFixed(1)+'/10'}</div>
           <div class="cap">avg reliability · ${notes.length} note${notes.length===1?'':'s'}</div>
         </div>
-        ${(acc.aliases && acc.aliases.length) ? `
-        <div class="alias-label">Aliases</div>
-        <div class="alias-chips">${acc.aliases.map(a=>`<span class="alias-chip">${esc(a)}</span>`).join('')}</div>` : ''}
       </div>
       <div>
+        ${(acc.aliases && acc.aliases.length) ? `<div class="alias-chips">${acc.aliases.map(a=>`<span class="alias-chip">${esc(a)}</span>`).join('')}</div>` : ''}
         <h1 class="dossier-handle">${esc(acc.name)}</h1>
         <h2 class="section-label">Community notes (${notes.length})</h2>
         <div class="notes-list">${notesHtml}</div>
