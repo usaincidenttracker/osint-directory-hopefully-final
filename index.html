@@ -140,6 +140,20 @@
   .toast.show{ opacity:1; }
   .toast.error{ border-color:var(--red); }
   .footnote{ margin-top:50px; padding-top:16px; border-top:1px solid var(--line-soft); color:var(--muted-2); font-size:11.5px; line-height:1.6; }
+
+  .zoomable{ cursor:zoom-in; }
+  .lightbox{
+    position:fixed; inset:0; background:rgba(6,10,8,0.92); display:none;
+    align-items:center; justify-content:center; z-index:100; cursor:zoom-out; padding:30px;
+  }
+  .lightbox.open{ display:flex; }
+  .lightbox img{ max-width:min(90vw,700px); max-height:85vh; border-radius:6px; border:1px solid var(--line); object-fit:contain; }
+  .lightbox-close{
+    position:absolute; top:18px; right:24px; color:var(--muted); font-size:22px; cursor:pointer;
+    width:36px; height:36px; display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--line); border-radius:6px; background:var(--panel);
+  }
+  .lightbox-close:hover{ color:var(--text); border-color:var(--muted-2); }
 </style>
 </head>
 <body>
@@ -153,7 +167,7 @@
   <div class="masthead">
     <div>
       <h1 class="display">OSINT Account Directory</h1>
-      <div class="subtitle">A Service Provided by USA Inicdent Tracker</div>
+      <div class="subtitle">Account Search — Reliability Notes</div>
     </div>
     <div class="stamp" id="recordCount">— records on file</div>
   </div>
@@ -309,12 +323,17 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="lightbox" id="lightbox">
+  <span class="lightbox-close">✕</span>
+  <img id="lightboxImg" src="" alt="">
+</div>
+
 <script>
 /* ============================================================
    CONFIG — fill these in with your Supabase project's values.
    Project Settings → API → Project URL / anon public key.
    ============================================================ */
-const SUPABASE_URL = "https://vpnhtkqhgduqylrznqxw.supabase.co/";
+const SUPABASE_URL = "https://vpnhtkqhgduqylrznqxw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZwbmh0a3FoZ2R1cXlscnpucXh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5Njk5NjgsImV4cCI6MjEwMzU0NTk2OH0.Ms7hrOPQ5Mp2Cklk1Y_L_weT3Qo1wMHx_lNhqXn_OZU";
 
 const isConfigured = !SUPABASE_URL.includes("YOUR-PROJECT-REF") && !SUPABASE_ANON_KEY.includes("YOUR-ANON");
@@ -368,6 +387,27 @@ function starBadge(avg){
   return `<span class="star-badge">${STAR} ${avg.toFixed(1)}/10</span>`;
 }
 
+/* ---------------- LIGHTBOX ---------------- */
+function attachZoomHandlers(container){
+  container.querySelectorAll('.zoomable').forEach(img=>{
+    img.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      openLightbox(img.dataset.full);
+    });
+  });
+}
+function openLightbox(src){
+  if(!src) return;
+  document.getElementById('lightboxImg').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox(){
+  document.getElementById('lightbox').classList.remove('open');
+  document.getElementById('lightboxImg').src = '';
+}
+document.getElementById('lightbox').addEventListener('click', closeLightbox);
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeLightbox(); });
+
 /* ---------------- TABS ---------------- */
 document.querySelectorAll('.tab-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -404,6 +444,7 @@ function renderResults(){
   filtered.forEach(acc=>{
     document.getElementById('card-'+acc.id).addEventListener('click', ()=>openDossier(acc.id));
   });
+  attachZoomHandlers(grid);
 }
 
 function renderCard(acc){
@@ -412,7 +453,7 @@ function renderCard(acc){
   return `
     <div class="card" id="card-${acc.id}">
       <div class="card-top">
-        <div class="photo">${acc.photo ? `<img src="${acc.photo}" alt="">` : '👤'}</div>
+        <div class="photo">${acc.photo ? `<img class="zoomable" data-full="${esc(acc.photo)}" src="${esc(acc.photo)}" alt="">` : '👤'}</div>
         <div>
           <p class="card-title">${esc(acc.name)}</p>
           <div class="card-loc">${PIN} ${esc(acc.country || 'Unknown location')}</div>
@@ -471,7 +512,7 @@ function renderDossier(){
     <button class="back-link" id="btnBack">← Back to search</button>
     <div class="dossier-grid">
       <div>
-        <div class="dossier-photo">${acc.photo ? `<img src="${acc.photo}">` : '👤'}</div>
+        <div class="dossier-photo">${acc.photo ? `<img class="zoomable" data-full="${esc(acc.photo)}" src="${esc(acc.photo)}">` : '👤'}</div>
         <div class="dossier-loc">${PIN} ${esc(acc.country || 'Unknown location')}</div>
         <div class="score-card">
           <div class="big-star">${STAR} ${avg===null ? 'N/A' : avg.toFixed(1)+'/10'}</div>
@@ -511,6 +552,7 @@ function renderDossier(){
     </div>`;
 
   document.getElementById('btnBack').addEventListener('click', closeDossier);
+  attachZoomHandlers(wrap);
   document.getElementById('noteScore').addEventListener('input', (e)=>{
     document.getElementById('scoreVal').textContent = e.target.value + '/10';
   });
